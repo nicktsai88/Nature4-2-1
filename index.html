@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>擬真語音互動測驗：The Mystery of the Sailing Stones</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+            background-color: #f0f2f5;
+        }
+        
+        /* Smooth Highlighting for Karaoke Mode */
+        .highlight-text {
+            background-color: #fef3c7; /* amber-100 */
+            color: #d97706; /* amber-600 */
+            padding: 2px 4px;
+            border-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .correct-answer {
+            background-color: #ecfdf5; 
+            border: 1px solid #10b981;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+        }
+        
+        .wrong-answer {
+            background-color: #fef2f2;
+            border: 1px solid #ef4444;
+        }
+
+        .explanation-box {
+            display: none;
+            margin-top: 10px;
+            font-size: 0.95em;
+            color: #4b5563;
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #6366f1;
+        }
+
+        .option-label {
+            transition: all 0.2s;
+        }
+        .option-label:hover {
+            background-color: #f3f4f6;
+        }
+        
+        /* Audio Wave Animation */
+        .equalizer {
+            display: flex;
+            align-items: flex-end;
+            height: 20px;
+            gap: 2px;
+        }
+        .bar {
+            width: 4px;
+            background: #fff;
+            animation: bounce 0ms infinite ease-in-out alternate;
+        }
+        .playing .bar {
+            animation-duration: 400ms;
+        }
+        .playing .bar:nth-child(1) { animation-delay: -0.2s; }
+        .playing .bar:nth-child(2) { animation-delay: -0.4s; }
+        .playing .bar:nth-child(3) { animation-delay: -0.6s; }
+        .playing .bar:nth-child(4) { animation-delay: -0.8s; }
+        @keyframes bounce {
+            0% { height: 3px; opacity: 0.5; }
+            100% { height: 20px; opacity: 1; }
+        }
+        
+        .hidden-content {
+            filter: blur(12px);
+            user-select: none;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-12">
+
+    <!-- Navbar / Audio Player Sticky Header -->
+    <div class="sticky top-0 z-50 bg-indigo-700 text-white shadow-xl transition-all duration-300" id="audio-player-bar">
+        <div class="max-w-4xl mx-auto px-4 py-3">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-3">
+                
+                <!-- Left: Title & Status -->
+                <div class="flex items-center gap-3 w-full md:w-auto justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white">
+                            <i class="fas fa-headphones-alt text-lg"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-sm font-bold text-indigo-100 uppercase tracking-wide">Listening Quiz</h1>
+                            <div class="text-xs text-indigo-200 flex items-center gap-1" id="voice-indicator">
+                                <i class="fas fa-robot"></i> Initializing Voice...
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Mobile Play Button -->
+                    <button onclick="togglePlay()" class="md:hidden w-10 h-10 bg-white text-indigo-700 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition">
+                        <i class="fas fa-play" id="mobile-play-icon"></i>
+                    </button>
+                </div>
+
+                <!-- Center: Controls -->
+                <div class="flex items-center gap-4">
+                    <!-- Rewind -->
+                    <button onclick="restartAudio()" class="text-indigo-200 hover:text-white transition" title="Restart">
+                        <i class="fas fa-step-backward"></i>
+                    </button>
+                    
+                    <!-- Main Play Button (Desktop) -->
+                    <button onclick="togglePlay()" class="hidden md:flex w-12 h-12 bg-white text-indigo-700 rounded-full shadow-lg items-center justify-center hover:scale-105 transition hover:shadow-white/20">
+                        <i class="fas fa-play text-xl ml-1" id="main-play-icon"></i>
+                    </button>
+
+                    <!-- Visualizer -->
+                    <div class="equalizer" id="visualizer">
+                        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                    </div>
+                </div>
+
+                <!-- Right: Settings -->
+                <div class="flex items-center gap-2 text-sm w-full md:w-auto justify-center md:justify-end border-t md:border-t-0 border-indigo-600 pt-2 md:pt-0 mt-2 md:mt-0">
+                    <!-- Speed -->
+                    <div class="relative group">
+                        <button class="flex items-center gap-1 bg-indigo-800/50 hover:bg-indigo-600 px-3 py-1.5 rounded-lg transition">
+                            <i class="fas fa-tachometer-alt"></i> <span id="speed-label">1.0x</span>
+                        </button>
+                        <div class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-white text-gray-800 rounded shadow-lg overflow-hidden">
+                            <button onclick="setSpeed(0.8)" class="px-4 py-2 hover:bg-gray-100 text-left whitespace-nowrap">0.8x (Slow)</button>
+                            <button onclick="setSpeed(1.0)" class="px-4 py-2 hover:bg-gray-100 text-left whitespace-nowrap font-bold">1.0x (Normal)</button>
+                            <button onclick="setSpeed(1.2)" class="px-4 py-2 hover:bg-gray-100 text-left whitespace-nowrap">1.2x (Fast)</button>
+                        </div>
+                    </div>
+
+                    <!-- Toggle Text -->
+                    <button onclick="toggleText()" id="toggle-text-btn" class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold transition shadow">
+                        <i class="fas fa-eye-slash"></i> <span>Hide Text</span>
+                    </button>
+                    
+                    <!-- File Upload (Hidden by default, for Pro users) -->
+                    <label class="cursor-pointer bg-indigo-800/50 hover:bg-indigo-600 px-3 py-1.5 rounded-lg transition" title="Upload your own MP3">
+                        <i class="fas fa-upload"></i>
+                        <input type="file" id="audio-upload" accept="audio/*" class="hidden" onchange="handleFileUpload(this)">
+                    </label>
+                </div>
+            </div>
+        </div>
+        <!-- Progress Bar -->
+        <div class="w-full bg-indigo-900 h-1.5">
+            <div id="progress-bar" class="h-full bg-amber-400 w-0 transition-all duration-300"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-3xl mx-auto p-4 md:p-6 space-y-8">
+        
+        <!-- Image Card -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200">
+             <div class="w-full h-64 bg-amber-50 relative overflow-hidden group">
+                <!-- SVG Illustration -->
+                <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 400 200">
+                    <!-- Background Gradient -->
+                    <defs>
+                        <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#93c5fd;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#e0f2fe;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#e5e7eb;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#d1d5db;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    
+                    <rect width="400" height="120" fill="url(#skyGrad)" />
+                    <rect y="120" width="400" height="80" fill="url(#groundGrad)" />
+                    
+                    <!-- Mountains -->
+                    <path d="M-20 120 L50 40 L120 120 Z" fill="#9ca3af" />
+                    <path d="M80 120 L160 30 L240 120 Z" fill="#6b7280" />
+                    <path d="M200 120 L280 50 L360 120 Z" fill="#9ca3af" />
+                    <path d="M320 120 L420 60 L500 120 Z" fill="#6b7280" />
+
+                    <!-- Playa Cracks -->
+                    <g stroke="#9ca3af" stroke-width="0.5" fill="none">
+                        <path d="M50 140 l20 10 l-10 10" />
+                        <path d="M200 150 l30 -5 l10 15" />
+                        <path d="M350 130 l-20 20" />
+                    </g>
+                    
+                    <!-- Rock 1 -->
+                    <path d="M60 140 Q 100 130, 150 160" stroke="#b45309" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                    <circle cx="150" cy="160" r="8" fill="#4b5563" />
+                    <ellipse cx="150" cy="165" rx="8" ry="3" fill="black" opacity="0.2" />
+
+                    <!-- Rock 2 -->
+                    <path d="M300 130 Q 320 170, 280 150" stroke="#b45309" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                    <rect x="272" y="144" width="16" height="12" fill="#374151" transform="rotate(-15 280 150)" />
+                    <ellipse cx="280" cy="158" rx="10" ry="3" fill="black" opacity="0.2" />
+                </svg>
+                <div class="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                    Listening Focus: The Mystery of the Sailing Stones
+                </div>
+            </div>
+        </div>
+
+        <!-- Text Content Area -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-gray-200 relative">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 pb-4 border-b">The Mystery of the Sailing Stones</h2>
+            
+            <!-- Hidden Message Overlay -->
+            <div id="hidden-overlay" class="hidden absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center rounded-2xl backdrop-blur-sm transition-all">
+                <div class="bg-indigo-100 p-6 rounded-full mb-4">
+                    <i class="fas fa-ear-listen text-4xl text-indigo-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">Listen Carefully</h3>
+                <p class="text-gray-600 mb-6 text-center max-w-sm">The text is hidden to challenge your listening skills. Try to answer the questions by listening only!</p>
+                <button onclick="toggleText()" class="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 transition shadow-lg">
+                    Show Text
+                </button>
+            </div>
+
+            <!-- Article Container (Sentences will be injected here via JS for control) -->
+            <div id="article-display" class="prose max-w-none text-gray-700 text-lg leading-relaxed space-y-4">
+                <!-- Content injected by JS -->
+            </div>
+        </div>
+
+        <!-- Quiz Area -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 md:p-8 border border-gray-200">
+            <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center">
+                <span class="bg-indigo-100 text-indigo-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm">
+                    <i class="fas fa-pen"></i>
+                </span>
+                Comprehension Quiz
+            </h3>
+            
+            <form id="quizForm" class="space-y-8">
+                <!-- Questions will be generated here -->
+            </form>
+
+            <div class="mt-8 pt-6 border-t border-gray-100 flex flex-col items-center">
+                <button type="button" onclick="submitQuiz()" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold py-3 px-10 rounded-full shadow-lg transition transform hover:-translate-y-1 active:scale-95">
+                    Submit Answers
+                </button>
+                
+                <div id="score-card" class="hidden mt-6 text-center w-full bg-indigo-50 p-6 rounded-xl border border-indigo-100 animate-fade-in">
+                    <p class="text-gray-500 text-sm uppercase font-bold tracking-wider">Your Result</p>
+                    <div class="text-5xl font-extrabold text-indigo-600 my-2" id="final-score">0</div>
+                    <p id="feedback-msg" class="text-gray-700 font-medium"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Raw Text Data (Invisible) -->
+    <div id="raw-text" class="hidden">
+        In a quiet corner of Death Valley, California, there is a very strange place called Racetrack Playa. It is a dry, flat lakebed surrounded by mountains. For many years, this place held a big secret. Visitors noticed heavy rocks on the ground with long trails behind them. It looked like the rocks had moved by themselves across the desert floor. Some trails were straight, while others were curved. However, nobody had ever actually seen the rocks move.
+
+        This phenomenon puzzled scientists for decades. How could heavy stones travel hundreds of meters without any help? People had many wild ideas. Some thought aliens were moving them. Others believed it was caused by magnetism or powerful winds. But without proof, the sailing stones remained a mystery.
+
+        Finally, in 2014, a team of scientists led by Richard Norris solved the puzzle. They put GPS devices on some rocks and set up cameras. They waited patiently. One winter day, the perfect conditions arrived. First, rain filled the dry lakebed with a shallow layer of water. At night, the water froze into thin sheets of ice. When the sun came out the next morning, the ice began to break into large floating panels.
+
+        Then, a light wind began to blow. The wind pushed the thin ice sheets against the rocks. The ice acted like a boat, and the wet mud was slippery. The rocks slowly slid across the mud, leaving deep trails behind them. By noon, the ice melted, and the water dried up, leaving only the rocks and their tracks.
+
+        The mystery was solved. It wasn't magic or aliens; it was a rare mix of rain, ice, wind, and sun. Nature is truly full of surprises!
+    </div>
+
+    <script>
+        // --- Data & State ---
+        const quizData = [
+            { id: 'q1', q: "1. What is the main idea of the article?", options: {A: "How to visit Death Valley safely.", B: "The history of aliens in California.", C: "How scientists solved the mystery of the moving rocks.", D: "Why rocks are heavy and dangerous."}, ans: 'C', expl: "文章主旨是科學家如何解開石頭移動之謎。" },
+            { id: 'q2', q: "2. Where is Racetrack Playa located?", options: {A: "In Death Valley, California.", B: "On a snowy mountain top.", C: "Under the ocean.", D: "In a busy city."}, ans: 'A', expl: "第一句提到位於 Death Valley, California。" },
+            { id: 'q3', q: "3. What does the word 'phenomenon' mean?", options: {A: "A scary monster.", B: "A scientific machine.", C: "An observable event or fact.", D: "A type of rock."}, ans: 'C', expl: "Phenomenon 意指「現象」，尤指不尋常的事件。" },
+            { id: 'q4', q: "4. Why was it a mystery for so long?", options: {A: "Because the rocks were invisible.", B: "Because the trails disappeared.", C: "Because nobody had ever seen them move.", D: "Scientists were afraid."}, ans: 'C', expl: "文中提到 nobody had ever actually seen the rocks move。" },
+            { id: 'q5', q: "5. Which was NOT a guess people made?", options: {A: "Aliens moved them.", B: "Magnetism caused it.", C: "Powerful winds pushed them.", D: "Bears carried them."}, ans: 'D', expl: "文中未提及 Bears (熊)。" },
+            { id: 'q6', q: "6. What technology was used?", options: {A: "GPS devices and cameras.", B: "Drones and robots.", C: "Magnets and ropes.", D: "Satellites only."}, ans: 'A', expl: "科學家使用了 GPS 裝置和相機。" },
+            { id: 'q7', q: "7. Which conditions are needed?", options: {A: "Heavy rain and storms.", B: "Dry ground and no wind.", C: "Shallow water, ice, sun, and light wind.", D: "Earthquakes."}, ans: 'C', expl: "需要淺水、薄冰、陽光和微風的罕見組合。" },
+            { id: 'q8', q: "8. How did the ice help?", options: {A: "It made rocks lighter.", B: "It pushed the rocks with the wind.", C: "It turned into a river.", D: "It froze the rocks down."}, ans: 'B', expl: "冰層像帆船一樣受風推動，進而推動石頭。" },
+            { id: 'q9', q: "9. The lakebed is usually __________.", options: {A: "Full of water.", B: "Covered in grass.", C: "Dry and flat.", D: "Full of trees."}, ans: 'C', expl: "文中描述為 dry, flat lakebed。" },
+            { id: 'q10', q: "10. How does the author feel?", options: {A: "Disappointed.", B: "Angry.", C: "Impressed by nature.", D: "Confused."}, ans: 'C', expl: "結尾 Nature is truly full of surprises 表達了讚嘆。" }
+        ];
+
+        let synth = window.speechSynthesis;
+        let sentences = [];
+        let currentSentenceIndex = 0;
+        let isPlaying = false;
+        let textHidden = false;
+        let speakingRate = 1.0;
+        let selectedVoice = null;
+        let uploadedAudio = null; // For user uploaded MP3
+        let usingUploadedAudio = false;
+
+        // --- Initialization ---
+        window.onload = function() {
+            renderArticle();
+            renderQuiz();
+            initVoice();
+        };
+
+        // --- Advanced TTS Logic ---
+
+        function initVoice() {
+            const voiceStatus = document.getElementById('voice-indicator');
+            
+            // Wait for voices to load (Chrome quirk)
+            let attempts = 0;
+            const loadVoices = () => {
+                const voices = synth.getVoices();
+                if (voices.length > 0) {
+                    // 1. Try Google US English (Best on Chrome)
+                    // 2. Try Microsoft Natural (Best on Edge)
+                    // 3. Fallback to any US English
+                    selectedVoice = voices.find(v => v.name === 'Google US English') || 
+                                    voices.find(v => v.name.includes('Microsoft') && v.name.includes('Natural') && v.lang.includes('en-US')) ||
+                                    voices.find(v => v.name.includes('Samantha')) || 
+                                    voices.find(v => v.lang === 'en-US');
+                    
+                    if (selectedVoice) {
+                        voiceStatus.innerHTML = `<i class="fas fa-check-circle text-green-300"></i> Voice Ready: ${selectedVoice.name.replace('Microsoft', '').replace('Google', '').substring(0, 15)}...`;
+                    } else {
+                        voiceStatus.innerHTML = `<i class="fas fa-exclamation-circle text-yellow-300"></i> Standard Voice`;
+                    }
+                } else if (attempts < 10) {
+                    attempts++;
+                    setTimeout(loadVoices, 100);
+                }
+            };
+            loadVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = loadVoices;
+            }
+        }
+
+        function renderArticle() {
+            const rawText = document.getElementById('raw-text').innerText;
+            // Split by regex but keep delimiters. Complex logic simplified here:
+            // We split by periods, question marks, exclamation marks.
+            const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+            const segments = segmenter.segment(rawText);
+            
+            const displayArea = document.getElementById('article-display');
+            displayArea.innerHTML = '';
+            
+            let p = document.createElement('p');
+            displayArea.appendChild(p);
+            
+            let count = 0;
+            for (const {segment} of segments) {
+                const cleanSegment = segment.trim();
+                if (cleanSegment.length > 0) {
+                    const span = document.createElement('span');
+                    span.innerText = segment; // keep original spacing
+                    span.id = `sent-${count}`;
+                    span.className = 'cursor-pointer hover:bg-gray-100 rounded transition';
+                    span.onclick = () => playFromSentence(parseInt(span.id.split('-')[1]));
+                    
+                    // Simple logic to detect paragraph breaks (double newline in raw text)
+                    // Since rawText formatting might be lost in HTML innerText, we rely on flow.
+                    // For better visuals, let's just create a new paragraph every 4-5 sentences roughly or check raw text line breaks.
+                    // Here we just append all to one flow, but let's try to detect big breaks.
+                    
+                    if(count > 0 && count % 5 === 0) {
+                         p = document.createElement('p');
+                         displayArea.appendChild(p);
+                    }
+                    
+                    p.appendChild(span);
+                    sentences.push({ text: cleanSegment, id: `sent-${count}` });
+                    count++;
+                }
+            }
+        }
+
+        function togglePlay() {
+            if (usingUploadedAudio) {
+                toggleUploadedAudio();
+                return;
+            }
+
+            if (isPlaying) {
+                pauseAudio();
+            } else {
+                playAudio();
+            }
+        }
+
+        function playAudio() {
+            isPlaying = true;
+            updatePlayBtn(true);
+            document.getElementById('visualizer').classList.add('playing');
+            
+            if (currentSentenceIndex >= sentences.length) {
+                currentSentenceIndex = 0;
+            }
+            speakSentence(currentSentenceIndex);
+        }
+
+        function speakSentence(index) {
+            if (!isPlaying || index >= sentences.length) {
+                if (index >= sentences.length) {
+                    isPlaying = false;
+                    updatePlayBtn(false);
+                    document.getElementById('visualizer').classList.remove('playing');
+                    currentSentenceIndex = 0;
+                    highlightSentence(-1);
+                }
+                return;
+            }
+
+            currentSentenceIndex = index;
+            highlightSentence(index);
+            updateProgressBar();
+
+            // Cancel any current speech
+            synth.cancel();
+
+            const text = sentences[index].text;
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            if (selectedVoice) utterance.voice = selectedVoice;
+            utterance.rate = speakingRate;
+            utterance.pitch = 1.05; // Slightly higher pitch often sounds clearer/friendlier
+            
+            // "Natural Pacing" Logic:
+            // Browser TTS often rushes. We can't insert silence directly easily in one utterance.
+            // But since we are doing sentence-by-sentence, we get a natural pause between function calls.
+            
+            utterance.onend = function() {
+                if (isPlaying) {
+                    // Add a small delay between sentences for natural breathing room
+                    setTimeout(() => {
+                        speakSentence(index + 1);
+                    }, 400); // 400ms pause
+                }
+            };
+            
+            utterance.onerror = function(e) {
+                console.error("Speech error", e);
+                isPlaying = false;
+                updatePlayBtn(false);
+            };
+
+            synth.speak(utterance);
+        }
+
+        function pauseAudio() {
+            isPlaying = false;
+            synth.cancel();
+            updatePlayBtn(false);
+            document.getElementById('visualizer').classList.remove('playing');
+        }
+
+        function restartAudio() {
+            synth.cancel();
+            if (uploadedAudio) {
+                uploadedAudio.currentTime = 0;
+                if(!uploadedAudio.paused) uploadedAudio.pause();
+            }
+            currentSentenceIndex = 0;
+            updateProgressBar();
+            highlightSentence(-1);
+            if (isPlaying) {
+                // Short timeout to let cancel finish
+                setTimeout(() => speakSentence(0), 100);
+            }
+        }
+        
+        function playFromSentence(index) {
+            if(usingUploadedAudio) return; // Can't seek specific text in MP3 easily without timestamps
+            currentSentenceIndex = index;
+            isPlaying = true;
+            updatePlayBtn(true);
+            document.getElementById('visualizer').classList.add('playing');
+            speakSentence(index);
+        }
+
+        function updatePlayBtn(isPlay) {
+            const icons = [document.getElementById('main-play-icon'), document.getElementById('mobile-play-icon')];
+            icons.forEach(icon => {
+                if (isPlay) {
+                    icon.classList.remove('fa-play');
+                    icon.classList.add('fa-pause');
+                } else {
+                    icon.classList.remove('fa-pause');
+                    icon.classList.add('fa-play');
+                }
+            });
+        }
+
+        function highlightSentence(index) {
+            // Remove old highlight
+            document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
+            
+            if (index >= 0 && index < sentences.length) {
+                const el = document.getElementById(sentences[index].id);
+                if (el) {
+                    el.classList.add('highlight-text');
+                    // Auto scroll to keep reading in view
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+        
+        function updateProgressBar() {
+             const progress = ((currentSentenceIndex + 1) / sentences.length) * 100;
+             document.getElementById('progress-bar').style.width = `${progress}%`;
+        }
+        
+        function setSpeed(rate) {
+            speakingRate = rate;
+            document.getElementById('speed-label').innerText = rate + 'x';
+            if(usingUploadedAudio && uploadedAudio) {
+                uploadedAudio.playbackRate = rate;
+            } else if (isPlaying) {
+                // Restart current sentence to apply speed
+                synth.cancel();
+                speakSentence(currentSentenceIndex);
+            }
+        }
+
+        // --- Uploaded Audio Logic (Pro Feature) ---
+        function handleFileUpload(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const url = URL.createObjectURL(file);
+                
+                // Reset TTS
+                synth.cancel();
+                isPlaying = false;
+                
+                // Setup Audio Object
+                if(uploadedAudio) uploadedAudio.pause();
+                uploadedAudio = new Audio(url);
+                usingUploadedAudio = true;
+                
+                // UI Feedback
+                document.getElementById('voice-indicator').innerHTML = `<i class="fas fa-file-audio text-green-400"></i> Using: ${file.name}`;
+                updatePlayBtn(false);
+                
+                uploadedAudio.onended = () => {
+                    isPlaying = false;
+                    updatePlayBtn(false);
+                    document.getElementById('visualizer').classList.remove('playing');
+                };
+                
+                uploadedAudio.ontimeupdate = () => {
+                     const pct = (uploadedAudio.currentTime / uploadedAudio.duration) * 100;
+                     document.getElementById('progress-bar').style.width = `${pct}%`;
+                };
+                
+                alert("音檔已載入！請按播放鍵開始。(Audio Loaded!)");
+            }
+        }
+        
+        function toggleUploadedAudio() {
+            if(!uploadedAudio) return;
+            
+            if (uploadedAudio.paused) {
+                uploadedAudio.play();
+                uploadedAudio.playbackRate = speakingRate;
+                isPlaying = true;
+                updatePlayBtn(true);
+                document.getElementById('visualizer').classList.add('playing');
+            } else {
+                uploadedAudio.pause();
+                isPlaying = false;
+                updatePlayBtn(false);
+                document.getElementById('visualizer').classList.remove('playing');
+            }
+        }
+
+        // --- UI Logic ---
+        function toggleText() {
+            textHidden = !textHidden;
+            const overlay = document.getElementById('hidden-overlay');
+            const btn = document.getElementById('toggle-text-btn');
+            
+            if (textHidden) {
+                overlay.classList.remove('hidden');
+                btn.innerHTML = '<i class="fas fa-eye"></i> <span>Show Text</span>';
+                btn.classList.replace('bg-amber-500', 'bg-indigo-500');
+                btn.classList.replace('hover:bg-amber-600', 'hover:bg-indigo-600');
+            } else {
+                overlay.classList.add('hidden');
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> <span>Hide Text</span>';
+                btn.classList.replace('bg-indigo-500', 'bg-amber-500');
+                btn.classList.replace('hover:bg-indigo-600', 'hover:bg-amber-600');
+            }
+        }
+
+        function renderQuiz() {
+            const form = document.getElementById('quizForm');
+            form.innerHTML = '';
+            
+            quizData.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 p-5 rounded-xl border border-gray-100 transition hover:shadow-md';
+                div.innerHTML = `
+                    <p class="font-bold text-gray-800 mb-3 text-lg">${item.q}</p>
+                    <div class="space-y-2">
+                        ${Object.keys(item.options).map(key => `
+                            <label class="flex items-center p-3 rounded-lg cursor-pointer option-label border border-transparent hover:border-indigo-200 bg-white">
+                                <input type="radio" name="${item.id}" value="${key}" class="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-gray-300">
+                                <span class="ml-3 text-gray-700 font-medium">${key}) ${item.options[key]}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                    <div id="${item.id}-expl" class="explanation-box mt-4">
+                        <p class="font-bold text-indigo-600 mb-1"><i class="fas fa-check-circle"></i> Correct Answer: ${item.ans}</p>
+                        <p>${item.expl}</p>
+                    </div>
+                `;
+                form.appendChild(div);
+            });
+        }
+
+        function submitQuiz() {
+            let score = 0;
+            let answered = 0;
+            const form = document.getElementById('quizForm');
+            const formData = new FormData(form);
+            
+            // Disable inputs
+            const inputs = form.querySelectorAll('input');
+            inputs.forEach(i => i.disabled = true);
+            
+            quizData.forEach(item => {
+                const userAns = formData.get(item.id);
+                const container = document.querySelector(`input[name="${item.id}"]`).closest('.bg-gray-50');
+                const expl = document.getElementById(`${item.id}-expl`);
+                
+                expl.style.display = 'block';
+                
+                // Reset styles
+                container.classList.remove('bg-gray-50');
+                
+                if (userAns === item.ans) {
+                    score += 10;
+                    container.classList.add('correct-answer');
+                } else {
+                    container.classList.add('wrong-answer');
+                }
+            });
+
+            const scoreDisplay = document.getElementById('final-score');
+            const feedback = document.getElementById('feedback-msg');
+            const resultCard = document.getElementById('score-card');
+            
+            resultCard.classList.remove('hidden');
+            scoreDisplay.innerText = `${score} / 100`;
+            
+            if (score === 100) feedback.innerText = "Perfect! Your listening is amazing!";
+            else if (score >= 80) feedback.innerText = "Great job! Almost perfect.";
+            else if (score >= 60) feedback.innerText = "Good pass. Review the text and try again.";
+            else feedback.innerText = "Don't give up! Listen to the audio a few more times.";
+            
+            resultCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    </script>
+</body>
+</html>
